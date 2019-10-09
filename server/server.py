@@ -11,13 +11,17 @@ The other is a notification message (display notification) with platform specifi
 customizations. For example, a badge is added to messages that are sent to iOS devices.
 """
 
+import os
+import json
 import argparse
 import json
 import requests
 
 from oauth2client.service_account import ServiceAccountCredentials
 
-PROJECT_ID = 'notifyme-61b5a'
+SERVICE_ACCOUNT_PATH = os.path.dirname(__file__) + '/service-account.json'
+with open(SERVICE_ACCOUNT_PATH, 'r') as service_account_file:
+    PROJECT_ID = json.load(service_account_file).get('project_id')
 BASE_URL = 'https://fcm.googleapis.com'
 FCM_ENDPOINT = 'v1/projects/' + PROJECT_ID + '/messages:send'
 FCM_URL = BASE_URL + '/' + FCM_ENDPOINT
@@ -31,8 +35,9 @@ def _get_access_token():
 
     :return: Access token.
     """
+
     credentials = ServiceAccountCredentials.from_json_keyfile_name(
-        'service-account.json', SCOPES)
+        SERVICE_ACCOUNT_PATH, SCOPES)
     access_token_info = credentials.get_access_token()
     return access_token_info.access_token
 # [END retrieve_access_token]
@@ -110,6 +115,25 @@ def _build_override_message():
     return fcm_message
 
 
+def _build_common_custom_message(title, body, topic, data, link, icon):
+    message = {
+        'message': {
+            'topic': topic,
+            'notification': {
+                'title': title,
+                'body': body
+            },
+            'data': data,
+            'delivery_receipt_requested': True
+        }
+    }
+    if link:
+        message['message']['notification']['click_action'] = link
+    if icon:
+        message['message']['notification']['icon'] = icon
+    return message
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--message')
@@ -124,6 +148,20 @@ def main():
         print('FCM request body for override message:')
         print(json.dumps(override_message, indent=2))
         _send_fcm_message(override_message)
+    elif args.message:
+        print('Send custom message.')
+        message_params = json.loads(args.message)
+        common_message = _build_common_custom_message(
+            title=message_params.get('title'),
+            body=message_params.get('body'),
+            topic=message_params.get('topic'),
+            data=message_params.get('data'),
+            link=message_params.get('link'),
+            icon=message_params.get('icon')
+        )
+        print('FCM request body for message using common notification object:')
+        print(json.dumps(common_message, indent=2))
+        _send_fcm_message(common_message)
     else:
         print('''Invalid command. Please use one of the following commands:
 python messaging.py --message=common-message
